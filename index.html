@@ -117,8 +117,11 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
             controls.handleResize();
-            resetCameraPosition(); // 카메라 위치 초기화
+            resetCameraPosition();
         }
+
+        // 창 크기 조절 이벤트 리스너 추가
+        window.addEventListener('resize', onWindowResize, false);
 
         // 초기 카메라 위치 설정
         resetCameraPosition();
@@ -159,6 +162,7 @@
         function startAudio() {
             if (!hasInteracted) {
                 hasInteracted = true;
+                audioPlayer.volume = 0.5; // 볼륨을 50%로 설정
                 audioPlayer.play().catch(error => {
                     console.log("오디오 재생 실패:", error);
                 });
@@ -170,10 +174,10 @@
 
         if (isMobile) {
             // 모바일: 첫 터치에 음악 재생
-            document.addEventListener('touchstart', startAudio, { once: true });
+            renderer.domElement.addEventListener('touchstart', startAudio, { once: true });
         } else {
             // 데스크톱: 마우스 진입 시 음악 재생
-            document.addEventListener('mouseover', startAudio, { once: true });
+            renderer.domElement.addEventListener('mouseenter', startAudio, { once: true });
         }
 
         // 페이지 visibility 변경 시 오디오 처리
