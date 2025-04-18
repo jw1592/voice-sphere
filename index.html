@@ -22,6 +22,9 @@
             display: none;
         }
     </style>
+    <!-- Firebase SDK 추가 -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
     <script type="importmap">
     {
         "imports": {
@@ -38,6 +41,20 @@
     </audio>
 
     <script type="module">
+        // Firebase 초기화
+        const firebaseConfig = {
+            apiKey: "AIzaSyCzKb2jHf-VjfKc2st_S2o-wIygY9QLIlk",
+            authDomain: "voice-sphere-48812.firebaseapp.com",
+            projectId: "voice-sphere-48812",
+            storageBucket: "voice-sphere-48812.firebasestorage.app",
+            messagingSenderId: "712806442728",
+            appId: "1:712806442728:web:99b72fac44bcca1969cb5d",
+            databaseURL: "https://voice-sphere-48812-default-rtdb.asia-southeast1.firebasedatabase.app"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
         import * as THREE from 'three';
         import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
 
@@ -75,6 +92,7 @@
         const particlesGeometry = new THREE.BufferGeometry();
         const particlesCount = 3000;
         const positions = new Float32Array(particlesCount * 3);
+        const colors = new Float32Array(particlesCount * 3);
         const radius = 2;
 
         for(let i = 0; i < particlesCount; i++) {
@@ -88,13 +106,19 @@
             positions[i * 3] = x;
             positions[i * 3 + 1] = y;
             positions[i * 3 + 2] = z;
+
+            // 초기 색상 설정 (녹색)
+            colors[i * 3] = 0;     // R
+            colors[i * 3 + 1] = 1; // G
+            colors[i * 3 + 2] = 0; // B
         }
 
         particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
         const particlesMaterial = new THREE.PointsMaterial({
             size: 0.02,
-            color: 0x00ff00,
+            vertexColors: true, // 정점 색상 사용
             transparent: true,
             opacity: 0.8,
             sizeAttenuation: true
@@ -207,6 +231,74 @@
             message.style.transition = 'opacity 1s';
             setTimeout(() => message.remove(), 1000);
         }, 5000);
+
+        // Raycaster 설정
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // 마우스 클릭 이벤트 처리
+        function onMouseClick(event) {
+            // 마우스 좌표를 정규화된 장치 좌표로 변환
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            // Raycaster 업데이트
+            raycaster.setFromCamera(mouse, camera);
+
+            // 점들과의 교차 검사
+            const intersects = raycaster.intersectObject(particlesMesh);
+
+            if (intersects.length > 0) {
+                const index = intersects[0].index;
+                console.log('클릭한 점 인덱스:', index);
+                
+                // Firebase에서 점의 현재 상태 확인
+                database.ref('points/list/' + index).once('value')
+                    .then((snapshot) => {
+                        const pointData = snapshot.val();
+                        // 점이 비어있으면 차지
+                        if (!pointData || !pointData.isOccupied) {
+                            return database.ref('points/list/' + index).set({
+                                isOccupied: true,
+                                userId: 'temporary-user-id' // 나중에 실제 사용자 ID로 대체
+                            });
+                        }
+                    })
+                    .then(() => {
+                        // 점 색상 변경
+                        const colors = particlesMesh.geometry.attributes.color.array;
+                        colors[index * 3] = 1;    // R
+                        colors[index * 3 + 1] = 0;// G
+                        colors[index * 3 + 2] = 0;// B
+                        particlesMesh.geometry.attributes.color.needsUpdate = true;
+                    })
+                    .catch((error) => {
+                        console.error('점 업데이트 중 에러:', error);
+                    });
+            }
+        }
+
+        // 클릭 이벤트 리스너 추가
+        renderer.domElement.addEventListener('click', onMouseClick);
+
+        // Firebase 실시간 업데이트 감지
+        database.ref('points/list').on('child_changed', (snapshot) => {
+            const index = parseInt(snapshot.key);
+            const pointData = snapshot.val();
+            
+            // 색상 배열 업데이트
+            const colors = particlesMesh.geometry.attributes.color.array;
+            if (pointData.isOccupied) {
+                colors[index * 3] = 1;     // R (빨간색)
+                colors[index * 3 + 1] = 0; // G
+                colors[index * 3 + 2] = 0; // B
+            } else {
+                colors[index * 3] = 0;     // R
+                colors[index * 3 + 1] = 1; // G (녹색)
+                colors[index * 3 + 2] = 0; // B
+            }
+            particlesMesh.geometry.attributes.color.needsUpdate = true;
+        });
     </script>
 </body>
 </html> 
