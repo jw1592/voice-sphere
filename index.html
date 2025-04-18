@@ -23,6 +23,24 @@
             opacity: 0;
             pointer-events: none;
         }
+        #start-button {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 15px 30px;
+            font-size: 18px;
+            background-color: rgba(0, 255, 0, 0.3);
+            color: #fff;
+            border: 2px solid #00ff00;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+        #start-button:hover {
+            background-color: rgba(0, 255, 0, 0.5);
+        }
     </style>
     <script type="importmap">
     {
@@ -34,6 +52,7 @@
     </script>
 </head>
 <body>
+    <button id="start-button">Click to Start</button>
     <div id="youtube-player"></div>
 
     <script type="module">
@@ -102,7 +121,6 @@
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
-            particlesMesh.rotation.y += 0.001;
             renderer.render(scene, camera);
         }
 
@@ -117,6 +135,12 @@
         }
 
         animate();
+
+        // 시작 버튼 숨기기
+        const startButton = document.getElementById('start-button');
+        startButton.addEventListener('click', () => {
+            startButton.style.display = 'none';
+        });
     </script>
 
     <script>
@@ -131,7 +155,7 @@
             player = new YT.Player('youtube-player', {
                 videoId: '0zab30B7eEs',
                 playerVars: {
-                    'autoplay': 1,
+                    'autoplay': 0,
                     'controls': 0,
                     'disablekb': 1,
                     'enablejsapi': 1,
@@ -141,28 +165,20 @@
                     'playlist': '0zab30B7eEs',
                     'modestbranding': 1,
                     'playsinline': 1,
-                    'rel': 0,
-                    'mute': 1
+                    'rel': 0
                 },
                 events: {
-                    'onReady': onPlayerReady,
-                    'onStateChange': onPlayerStateChange
+                    'onReady': onPlayerReady
                 }
             });
         }
 
         function onPlayerReady(event) {
-            event.target.setVolume(20);
-            event.target.playVideo();
-            setTimeout(function() {
-                event.target.unMute();
-            }, 1000);
-        }
-
-        function onPlayerStateChange(event) {
-            if (event.data === YT.PlayerState.ENDED) {
-                player.playVideo();
-            }
+            const startButton = document.getElementById('start-button');
+            startButton.addEventListener('click', () => {
+                event.target.setVolume(20);
+                event.target.playVideo();
+            });
         }
     </script>
 </body>
