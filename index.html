@@ -149,7 +149,15 @@
         // 선택된 점 상태 관리
         let selectedPointIndex = null;
         let originalPositions = {};
+        let isAnimating = false;
         const bottomSheet = document.querySelector('.bottom-sheet');
+
+        // 애니메이션 상태
+        let animationFrame = null;
+        let currentPositions = {};
+        let targetPositions = {};
+        let animationStartTime = 0;
+        const ANIMATION_DURATION = 1000; // 1초
 
         for(let i = 0; i < particlesCount; i++) {
             const theta = Math.random() * Math.PI * 2;
@@ -173,7 +181,7 @@
         particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
         const particlesMaterial = new THREE.PointsMaterial({
-            size: 0.03,
+            size: 0.015,
             vertexColors: true,
             transparent: true,
             opacity: 0.8,
@@ -183,13 +191,199 @@
         const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
         scene.add(particlesMesh);
 
-        // 카메라 위치 초기화 함수
-        function resetCameraPosition() {
-            camera.position.set(0, 0, 5);
-            camera.lookAt(0, 0, 0);
-            controls.target.set(0, 0, 0);
-            controls.update();
+        // 이징 함수
+        function easeOutCubic(t) {
+            return 1 - Math.pow(1 - t, 3);
         }
+
+        // 점 위치 애니메이션 함수
+        function animatePoints() {
+            const currentTime = Date.now();
+            const elapsed = currentTime - animationStartTime;
+            const progress = Math.min(elapsed / ANIMATION_DURATION, 1);
+            const easedProgress = easeOutCubic(progress);
+
+            const positions = particlesMesh.geometry.attributes.position.array;
+
+            // 모든 점의 위치 업데이트
+            Object.entries(targetPositions).forEach(([index, targetPos]) => {
+                const startPos = currentPositions[index];
+                const i = parseInt(index);
+
+                positions[i * 3] = startPos.x + (targetPos.x - startPos.x) * easedProgress;
+                positions[i * 3 + 1] = startPos.y + (targetPos.y - startPos.y) * easedProgress;
+                positions[i * 3 + 2] = startPos.z + (targetPos.z - startPos.z) * easedProgress;
+            });
+
+            particlesMesh.geometry.attributes.position.needsUpdate = true;
+
+            if (progress < 1) {
+                animationFrame = requestAnimationFrame(animatePoints);
+            } else {
+                animationFrame = null;
+                isAnimating = false;
+            }
+        }
+
+        // 점 위치 복원 함수
+        function restorePointPositions() {
+            if (selectedPointIndex === null) return;
+
+            if (animationFrame) {
+                cancelAnimationFrame(animationFrame);
+            }
+
+            const positions = particlesMesh.geometry.attributes.position.array;
+            
+            // 현재 위치 저장
+            currentPositions = {};
+            Object.keys(originalPositions).forEach(index => {
+                const i = parseInt(index);
+                currentPositions[i] = {
+                    x: positions[i * 3],
+                    y: positions[i * 3 + 1],
+                    z: positions[i * 3 + 2]
+                };
+            });
+
+            // 목표 위치 설정
+            targetPositions = originalPositions;
+
+            // 색상 복원
+            const colors = particlesMesh.geometry.attributes.color.array;
+            colors[selectedPointIndex * 3] = 0.2;     // R
+            colors[selectedPointIndex * 3 + 1] = 0.8; // G
+            colors[selectedPointIndex * 3 + 2] = 0.2; // B
+            particlesMesh.geometry.attributes.color.needsUpdate = true;
+
+            // 애니메이션 시작
+            animationStartTime = Date.now();
+            isAnimating = true;
+            animatePoints();
+
+            originalPositions = {};
+            selectedPointIndex = null;
+        }
+
+        // 카메라 줌 애니메이션
+        function animateCameraToPoint(targetPosition) {
+            const startPosition = camera.position.clone();
+            const startTarget = controls.target.clone();
+            const startTime = Date.now();
+
+            function animate() {
+                const currentTime = Date.now();
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / ANIMATION_DURATION, 1);
+                const easedProgress = easeOutCubic(progress);
+
+                // 카메라 위치 업데이트
+                const targetDistance = camera.position.length() * 0.8;
+                const targetCameraPos = targetPosition.clone().normalize().multiplyScalar(targetDistance);
+                camera.position.lerpVectors(startPosition, targetCameraPos, easedProgress);
+
+                // 카메라 시선 업데이트
+                controls.target.lerpVectors(startTarget, targetPosition, easedProgress);
+                controls.update();
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                }
+            }
+
+            animate();
+        }
+
+        // 마우스 클릭 이벤트 처리
+        function onMouseClick(event) {
+            if (isAnimating) return;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(particlesMesh);
+
+            if (intersects.length > 0) {
+                const index = intersects[0].index;
+                
+                // 이전에 선택된 점이 있다면 복원
+                if (selectedPointIndex !== null) {
+                    restorePointPositions();
+                    return;
+                }
+
+                // 현재 선택된 점 저장
+                selectedPointIndex = index;
+                const positions = particlesMesh.geometry.attributes.position.array;
+                const selectedPosition = new THREE.Vector3(
+                    positions[index * 3],
+                    positions[index * 3 + 1],
+                    positions[index * 3 + 2]
+                );
+
+                // 주변 점들 밀어내기 준비
+                const pushRadius = 0.5;
+                const pushStrength = 0.3;
+                
+                // 현재 위치 저장
+                currentPositions = {};
+                targetPositions = {};
+
+                for (let i = 0; i < particlesCount; i++) {
+                    if (i === index) continue;
+
+                    const x = positions[i * 3];
+                    const y = positions[i * 3 + 1];
+                    const z = positions[i * 3 + 2];
+                    const point = new THREE.Vector3(x, y, z);
+                    const distance = selectedPosition.distanceTo(point);
+
+                    if (distance < pushRadius) {
+                        // 현재 위치 저장
+                        currentPositions[i] = { x, y, z };
+                        originalPositions[i] = { x, y, z };
+
+                        // 목표 위치 계산
+                        const direction = point.clone().sub(selectedPosition).normalize();
+                        const pushAmount = (1 - distance / pushRadius) * pushStrength;
+
+                        targetPositions[i] = {
+                            x: x + direction.x * pushAmount,
+                            y: y + direction.y * pushAmount,
+                            z: z + direction.z * pushAmount
+                        };
+                    }
+                }
+
+                // 애니메이션 시작
+                animationStartTime = Date.now();
+                isAnimating = true;
+                animatePoints();
+
+                // 선택된 점 스타일 변경 (주황색)
+                const colors = particlesMesh.geometry.attributes.color.array;
+                colors[index * 3] = 1;     // R
+                colors[index * 3 + 1] = 0.5; // G
+                colors[index * 3 + 2] = 0;   // B
+                particlesMesh.geometry.attributes.color.needsUpdate = true;
+
+                // 카메라 이동
+                animateCameraToPoint(selectedPosition);
+
+                // 바텀시트 표시
+                const userNickname = document.getElementById('user-nickname');
+                userNickname.textContent = '사용자_' + Math.floor(Math.random() * 1000);
+                bottomSheet.classList.add('active');
+            } else if (!event.target.closest('.bottom-sheet')) {
+                // 빈 공간 클릭 시 바텀시트 닫기 (바텀시트 내부 클릭은 제외)
+                bottomSheet.classList.remove('active');
+                restorePointPositions();
+            }
+        }
+
+        // 클릭 이벤트 리스너 추가
+        renderer.domElement.addEventListener('click', onMouseClick);
 
         // 창 크기 조절 시 카메라 위치 재설정
         function onWindowResize() {
@@ -197,14 +391,16 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
             controls.handleResize();
-            resetCameraPosition();
         }
 
         // 창 크기 조절 이벤트 리스너 추가
         window.addEventListener('resize', onWindowResize, false);
 
         // 초기 카메라 위치 설정
-        resetCameraPosition();
+        camera.position.set(0, 0, 5);
+        camera.lookAt(0, 0, 0);
+        controls.target.set(0, 0, 0);
+        controls.update();
 
         // 애니메이션
         function animate() {
@@ -300,109 +496,6 @@
         }
 
         renderer.domElement.addEventListener('mousemove', onMouseMove);
-
-        // 점 위치 복원 함수
-        function restorePointPositions() {
-            if (selectedPointIndex === null) return;
-
-            const positions = particlesMesh.geometry.attributes.position.array;
-            Object.entries(originalPositions).forEach(([index, pos]) => {
-                positions[index * 3] = pos.x;
-                positions[index * 3 + 1] = pos.y;
-                positions[index * 3 + 2] = pos.z;
-            });
-            particlesMesh.geometry.attributes.position.needsUpdate = true;
-
-            // 색상 복원
-            const colors = particlesMesh.geometry.attributes.color.array;
-            colors[selectedPointIndex * 3] = 0.2;     // R
-            colors[selectedPointIndex * 3 + 1] = 0.8; // G
-            colors[selectedPointIndex * 3 + 2] = 0.2; // B
-            particlesMesh.geometry.attributes.color.needsUpdate = true;
-
-            originalPositions = {};
-            selectedPointIndex = null;
-        }
-
-        // 마우스 클릭 이벤트 처리
-        function onMouseClick(event) {
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObject(particlesMesh);
-
-            if (intersects.length > 0) {
-                const index = intersects[0].index;
-                
-                // 이전에 선택된 점이 있다면 복원
-                restorePointPositions();
-
-                // 현재 선택된 점 저장
-                selectedPointIndex = index;
-                const positions = particlesMesh.geometry.attributes.position.array;
-                const selectedPosition = new THREE.Vector3(
-                    positions[index * 3],
-                    positions[index * 3 + 1],
-                    positions[index * 3 + 2]
-                );
-
-                // 주변 점들 밀어내기
-                const pushRadius = 0.5;
-                const pushStrength = 0.3;
-                
-                for (let i = 0; i < particlesCount; i++) {
-                    if (i === index) continue;
-
-                    const x = positions[i * 3];
-                    const y = positions[i * 3 + 1];
-                    const z = positions[i * 3 + 2];
-                    const point = new THREE.Vector3(x, y, z);
-                    const distance = selectedPosition.distanceTo(point);
-
-                    if (distance < pushRadius) {
-                        // 원래 위치 저장
-                        originalPositions[i] = { x, y, z };
-
-                        // 방향 벡터 계산
-                        const direction = point.sub(selectedPosition).normalize();
-                        const pushAmount = (1 - distance / pushRadius) * pushStrength;
-
-                        // 새 위치 계산
-                        positions[i * 3] = x + direction.x * pushAmount;
-                        positions[i * 3 + 1] = y + direction.y * pushAmount;
-                        positions[i * 3 + 2] = z + direction.z * pushAmount;
-                    }
-                }
-                particlesMesh.geometry.attributes.position.needsUpdate = true;
-
-                // 선택된 점 스타일 변경 (주황색)
-                const colors = particlesMesh.geometry.attributes.color.array;
-                colors[index * 3] = 1;     // R
-                colors[index * 3 + 1] = 0.5; // G
-                colors[index * 3 + 2] = 0;   // B
-                particlesMesh.geometry.attributes.color.needsUpdate = true;
-
-                // 카메라 이동
-                const targetPosition = selectedPosition.clone();
-                const distance = camera.position.length();
-                camera.position.copy(targetPosition).normalize().multiplyScalar(distance * 0.8);
-                controls.target.copy(targetPosition);
-                controls.update();
-
-                // 바텀시트 표시
-                const userNickname = document.getElementById('user-nickname');
-                userNickname.textContent = '사용자_' + Math.floor(Math.random() * 1000);
-                bottomSheet.classList.add('active');
-            } else if (!event.target.closest('.bottom-sheet')) {
-                // 빈 공간 클릭 시 바텀시트 닫기 (바텀시트 내부 클릭은 제외)
-                bottomSheet.classList.remove('active');
-                restorePointPositions();
-            }
-        }
-
-        // 클릭 이벤트 리스너 추가
-        renderer.domElement.addEventListener('click', onMouseClick);
 
         // Firebase 실시간 업데이트 감지
         database.ref('points/list').on('child_changed', (snapshot) => {
