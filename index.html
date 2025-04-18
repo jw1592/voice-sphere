@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Voice Sphere</title>
     <style>
         body {
@@ -10,18 +10,16 @@
             padding: 0;
             overflow: hidden;
             background-color: #000;
+            touch-action: none; /* 모바일에서 기본 터치 동작 비활성화 */
+            -webkit-touch-callout: none; /* iOS에서 길게 터치할 때 메뉴 비활성화 */
+            -webkit-user-select: none; /* 텍스트 선택 비활성화 */
+            user-select: none;
         }
         canvas {
             display: block;
         }
-        #youtube-player {
-            position: fixed;
-            top: -9999px;
-            left: -9999px;
-            width: 1px;
-            height: 1px;
-            opacity: 0;
-            pointer-events: none;
+        #audio-player {
+            display: none;
         }
         #start-button {
             position: fixed;
@@ -53,7 +51,10 @@
 </head>
 <body>
     <button id="start-button">Click to Start</button>
-    <div id="youtube-player"></div>
+    <audio id="audio-player" loop>
+        <source src="assets/audio/background.mp3" type="audio/mp3">
+        브라우저가 오디오를 지원하지 않습니다.
+    </audio>
 
     <script type="module">
         import * as THREE from 'three';
@@ -72,9 +73,22 @@
         controls.zoomSpeed = 1.2;
         controls.panSpeed = 0.8;
         controls.noZoom = false;
-        controls.noPan = false;
-        controls.staticMoving = false;
-        controls.dynamicDampingFactor = 0.05;
+        controls.noPan = true;
+        controls.staticMoving = true;
+        controls.dynamicDampingFactor = 0.3;
+        controls.minDistance = 3;
+        controls.maxDistance = 10;
+        controls.target = new THREE.Vector3(0, 0, 0);
+
+        // 모바일 터치 이벤트 방지
+        document.addEventListener('touchmove', function(e) {
+            e.preventDefault();
+        }, { passive: false });
+
+        // 더블탭 줌 방지
+        document.addEventListener('dblclick', function(e) {
+            e.preventDefault();
+        }, { passive: false });
 
         // 점들로 구성된 스피어 생성
         const particlesGeometry = new THREE.BufferGeometry();
@@ -108,7 +122,25 @@
         const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
         scene.add(particlesMesh);
 
-        camera.position.z = 5;
+        // 카메라 위치 초기화 함수
+        function resetCameraPosition() {
+            camera.position.set(0, 0, 5);
+            camera.lookAt(0, 0, 0);
+            controls.target.set(0, 0, 0);
+            controls.update();
+        }
+
+        // 창 크기 조절 시 카메라 위치 재설정
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            controls.handleResize();
+            resetCameraPosition(); // 카메라 위치 초기화
+        }
+
+        // 초기 카메라 위치 설정
+        resetCameraPosition();
 
         // 랜덤 회전 속도 설정
         const rotationSpeed = {
@@ -137,62 +169,29 @@
             renderer.render(scene, camera);
         }
 
-        // 창 크기 조절 대응
-        window.addEventListener('resize', onWindowResize, false);
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            controls.handleResize();
-        }
-
         animate();
 
-        // 시작 버튼 숨기기
+        // 시작 버튼 숨기기 및 오디오 재생
         const startButton = document.getElementById('start-button');
+        const audioPlayer = document.getElementById('audio-player');
+        
         startButton.addEventListener('click', () => {
             startButton.style.display = 'none';
+            audioPlayer.play().catch(error => {
+                console.log("오디오 재생 실패:", error);
+            });
         });
-    </script>
 
-    <script>
-        // YouTube API 로드
-        var tag = document.createElement('script');
-        tag.src = "https://www.youtube.com/iframe_api";
-        var firstScriptTag = document.getElementsByTagName('script')[0];
-        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-        var player;
-        function onYouTubeIframeAPIReady() {
-            player = new YT.Player('youtube-player', {
-                videoId: '0zab30B7eEs',
-                playerVars: {
-                    'autoplay': 0,
-                    'controls': 0,
-                    'disablekb': 1,
-                    'enablejsapi': 1,
-                    'fs': 0,
-                    'iv_load_policy': 3,
-                    'loop': 1,
-                    'playlist': '0zab30B7eEs',
-                    'modestbranding': 1,
-                    'playsinline': 1,
-                    'rel': 0
-                },
-                events: {
-                    'onReady': onPlayerReady
-                }
-            });
-        }
-
-        function onPlayerReady(event) {
-            const startButton = document.getElementById('start-button');
-            startButton.addEventListener('click', () => {
-                event.target.setVolume(20);
-                event.target.playVideo();
-            });
-        }
+        // 페이지 visibility 변경 시 오디오 처리
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                audioPlayer.pause();
+            } else if (startButton.style.display === 'none') {
+                audioPlayer.play().catch(error => {
+                    console.log("오디오 재생 실패:", error);
+                });
+            }
+        });
     </script>
 </body>
 </html> 
