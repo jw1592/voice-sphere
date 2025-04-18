@@ -21,6 +21,50 @@
         #audio-player {
             display: none;
         }
+
+        /* 바텀시트 스타일 */
+        .bottom-sheet {
+            position: fixed;
+            bottom: -200px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 400px;
+            background: rgba(30, 30, 30, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 20px 20px 0 0;
+            transition: transform 0.3s ease-out;
+            z-index: 1000;
+        }
+
+        .bottom-sheet.active {
+            transform: translate(-50%, -200px);
+        }
+
+        .bottom-sheet-content {
+            text-align: center;
+        }
+
+        .nickname {
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+
+        .message-button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+
+        .message-button:hover {
+            background: #45a049;
+        }
     </style>
     <!-- Firebase SDK 추가 -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -39,6 +83,13 @@
         <source src="assets/audio/background.mp3" type="audio/mp3">
         브라우저가 오디오를 지원하지 않습니다.
     </audio>
+
+    <div class="bottom-sheet">
+        <div class="bottom-sheet-content">
+            <div class="nickname">닉네임: <span id="user-nickname">-</span></div>
+            <button class="message-button">메시지 보내기</button>
+        </div>
+    </div>
 
     <script type="module">
         // Firebase 초기화
@@ -95,6 +146,11 @@
         const colors = new Float32Array(particlesCount * 3);
         const radius = 2;
 
+        // 선택된 점 상태 관리
+        let selectedPointIndex = null;
+        let originalPositions = {};
+        const bottomSheet = document.querySelector('.bottom-sheet');
+
         for(let i = 0; i < particlesCount; i++) {
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.acos((Math.random() * 2) - 1);
@@ -107,17 +163,17 @@
             positions[i * 3 + 1] = y;
             positions[i * 3 + 2] = z;
 
-            // 초기 색상 설정 (녹색)
-            colors[i * 3] = 0;     // R
-            colors[i * 3 + 1] = 1; // G
-            colors[i * 3 + 2] = 0; // B
+            // 초기 색상 설정 (연한 녹색)
+            colors[i * 3] = 0.2;     // R
+            colors[i * 3 + 1] = 0.8; // G
+            colors[i * 3 + 2] = 0.2; // B
         }
 
         particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
         const particlesMaterial = new THREE.PointsMaterial({
-            size: 0.05,
+            size: 0.03,
             vertexColors: true,
             transparent: true,
             opacity: 0.8,
@@ -150,30 +206,10 @@
         // 초기 카메라 위치 설정
         resetCameraPosition();
 
-        // 랜덤 회전 속도 설정
-        const rotationSpeed = {
-            x: (Math.random() - 0.5) * 0.001,
-            y: (Math.random() - 0.5) * 0.001,
-            z: (Math.random() - 0.5) * 0.001
-        };
-
-        // 마우스 휠 이벤트
-        let particleSize = 0.02;
-        window.addEventListener('wheel', (event) => {
-            particleSize = Math.max(0.01, Math.min(0.05, particleSize + event.deltaY * -0.0001));
-            particlesMaterial.size = particleSize;
-        });
-
         // 애니메이션
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
-            
-            // 자동 회전
-            particlesMesh.rotation.x += rotationSpeed.x;
-            particlesMesh.rotation.y += rotationSpeed.y;
-            particlesMesh.rotation.z += rotationSpeed.z;
-            
             renderer.render(scene, camera);
         }
 
@@ -265,45 +301,103 @@
 
         renderer.domElement.addEventListener('mousemove', onMouseMove);
 
+        // 점 위치 복원 함수
+        function restorePointPositions() {
+            if (selectedPointIndex === null) return;
+
+            const positions = particlesMesh.geometry.attributes.position.array;
+            Object.entries(originalPositions).forEach(([index, pos]) => {
+                positions[index * 3] = pos.x;
+                positions[index * 3 + 1] = pos.y;
+                positions[index * 3 + 2] = pos.z;
+            });
+            particlesMesh.geometry.attributes.position.needsUpdate = true;
+
+            // 색상 복원
+            const colors = particlesMesh.geometry.attributes.color.array;
+            colors[selectedPointIndex * 3] = 0.2;     // R
+            colors[selectedPointIndex * 3 + 1] = 0.8; // G
+            colors[selectedPointIndex * 3 + 2] = 0.2; // B
+            particlesMesh.geometry.attributes.color.needsUpdate = true;
+
+            originalPositions = {};
+            selectedPointIndex = null;
+        }
+
         // 마우스 클릭 이벤트 처리
         function onMouseClick(event) {
-            // 마우스 좌표를 정규화된 장치 좌표로 변환
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-            // Raycaster 업데이트
             raycaster.setFromCamera(mouse, camera);
-
-            // 점들과의 교차 검사
             const intersects = raycaster.intersectObject(particlesMesh);
 
             if (intersects.length > 0) {
                 const index = intersects[0].index;
-                console.log('클릭한 점 인덱스:', index);
                 
-                // Firebase에서 점의 현재 상태 확인
-                database.ref('points/list/' + index).once('value')
-                    .then((snapshot) => {
-                        const pointData = snapshot.val();
-                        // 점이 비어있으면 차지
-                        if (!pointData || !pointData.isOccupied) {
-                            return database.ref('points/list/' + index).set({
-                                isOccupied: true,
-                                userId: 'temporary-user-id' // 나중에 실제 사용자 ID로 대체
-                            });
-                        }
-                    })
-                    .then(() => {
-                        // 점 색상 변경
-                        const colors = particlesMesh.geometry.attributes.color.array;
-                        colors[index * 3] = 1;    // R
-                        colors[index * 3 + 1] = 0;// G
-                        colors[index * 3 + 2] = 0;// B
-                        particlesMesh.geometry.attributes.color.needsUpdate = true;
-                    })
-                    .catch((error) => {
-                        console.error('점 업데이트 중 에러:', error);
-                    });
+                // 이전에 선택된 점이 있다면 복원
+                restorePointPositions();
+
+                // 현재 선택된 점 저장
+                selectedPointIndex = index;
+                const positions = particlesMesh.geometry.attributes.position.array;
+                const selectedPosition = new THREE.Vector3(
+                    positions[index * 3],
+                    positions[index * 3 + 1],
+                    positions[index * 3 + 2]
+                );
+
+                // 주변 점들 밀어내기
+                const pushRadius = 0.5;
+                const pushStrength = 0.3;
+                
+                for (let i = 0; i < particlesCount; i++) {
+                    if (i === index) continue;
+
+                    const x = positions[i * 3];
+                    const y = positions[i * 3 + 1];
+                    const z = positions[i * 3 + 2];
+                    const point = new THREE.Vector3(x, y, z);
+                    const distance = selectedPosition.distanceTo(point);
+
+                    if (distance < pushRadius) {
+                        // 원래 위치 저장
+                        originalPositions[i] = { x, y, z };
+
+                        // 방향 벡터 계산
+                        const direction = point.sub(selectedPosition).normalize();
+                        const pushAmount = (1 - distance / pushRadius) * pushStrength;
+
+                        // 새 위치 계산
+                        positions[i * 3] = x + direction.x * pushAmount;
+                        positions[i * 3 + 1] = y + direction.y * pushAmount;
+                        positions[i * 3 + 2] = z + direction.z * pushAmount;
+                    }
+                }
+                particlesMesh.geometry.attributes.position.needsUpdate = true;
+
+                // 선택된 점 스타일 변경 (주황색)
+                const colors = particlesMesh.geometry.attributes.color.array;
+                colors[index * 3] = 1;     // R
+                colors[index * 3 + 1] = 0.5; // G
+                colors[index * 3 + 2] = 0;   // B
+                particlesMesh.geometry.attributes.color.needsUpdate = true;
+
+                // 카메라 이동
+                const targetPosition = selectedPosition.clone();
+                const distance = camera.position.length();
+                camera.position.copy(targetPosition).normalize().multiplyScalar(distance * 0.8);
+                controls.target.copy(targetPosition);
+                controls.update();
+
+                // 바텀시트 표시
+                const userNickname = document.getElementById('user-nickname');
+                userNickname.textContent = '사용자_' + Math.floor(Math.random() * 1000);
+                bottomSheet.classList.add('active');
+            } else if (!event.target.closest('.bottom-sheet')) {
+                // 빈 공간 클릭 시 바텀시트 닫기 (바텀시트 내부 클릭은 제외)
+                bottomSheet.classList.remove('active');
+                restorePointPositions();
             }
         }
 
