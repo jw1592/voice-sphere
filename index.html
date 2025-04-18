@@ -21,24 +21,6 @@
         #audio-player {
             display: none;
         }
-        #start-button {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            padding: 15px 30px;
-            font-size: 18px;
-            background-color: rgba(0, 255, 0, 0.3);
-            color: #fff;
-            border: 2px solid #00ff00;
-            border-radius: 5px;
-            cursor: pointer;
-            z-index: 1000;
-            transition: all 0.3s ease;
-        }
-        #start-button:hover {
-            background-color: rgba(0, 255, 0, 0.5);
-        }
     </style>
     <script type="importmap">
     {
@@ -50,7 +32,6 @@
     </script>
 </head>
 <body>
-    <button id="start-button">Click to Start</button>
     <audio id="audio-player" loop>
         <source src="assets/audio/background.mp3" type="audio/mp3">
         브라우저가 오디오를 지원하지 않습니다.
