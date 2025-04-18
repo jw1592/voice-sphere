@@ -116,17 +116,17 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // TrackballControls 추가
+        // TrackballControls 설정 수정
         const controls = new TrackballControls(camera, renderer.domElement);
-        controls.rotateSpeed = 2.0;
-        controls.zoomSpeed = 1.2;
+        controls.rotateSpeed = 1.5;
+        controls.zoomSpeed = 0.8;
         controls.panSpeed = 0.8;
         controls.noZoom = false;
         controls.noPan = true;
-        controls.staticMoving = true;
-        controls.dynamicDampingFactor = 0.3;
+        controls.staticMoving = false;
+        controls.dynamicDampingFactor = 0.15;
         controls.minDistance = 3;
-        controls.maxDistance = 10;
+        controls.maxDistance = 8;
         controls.target.set(0, 0, 0);
 
         // 모바일 터치 이벤트 방지
@@ -191,17 +191,21 @@
         const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
         scene.add(particlesMesh);
 
-        // 이징 함수
+        // 이징 함수들
         function easeOutCubic(t) {
             return 1 - Math.pow(1 - t, 3);
         }
 
-        // 점 위치 애니메이션 함수
+        function easeInOutQuad(t) {
+            return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        }
+
+        // 점 위치 애니메이션
         function animatePoints() {
             const currentTime = Date.now();
             const elapsed = currentTime - animationStartTime;
             const progress = Math.min(elapsed / ANIMATION_DURATION, 1);
-            const easedProgress = easeOutCubic(progress);
+            const easedProgress = easeInOutQuad(progress);
 
             const positions = particlesMesh.geometry.attributes.position.array;
 
@@ -269,27 +273,36 @@
         function animateCameraToPoint(targetPosition) {
             const startPosition = camera.position.clone();
             const startTime = Date.now();
+            const ZOOM_DURATION = 1500; // 줌 애니메이션 시간을 1.5초로 설정
 
             function animate() {
                 const currentTime = Date.now();
                 const elapsed = currentTime - startTime;
-                const progress = Math.min(elapsed / ANIMATION_DURATION, 1);
-                const easedProgress = easeOutCubic(progress);
+                const progress = Math.min(elapsed / ZOOM_DURATION, 1);
+                const easedProgress = easeInOutQuad(progress);
+
+                // 현재 카메라 거리의 80%로 줌인
+                const currentDistance = startPosition.length();
+                const targetDistance = currentDistance * 0.8;
+                const newDistance = currentDistance + (targetDistance - currentDistance) * easedProgress;
 
                 // 카메라 위치 업데이트
-                const targetDistance = camera.position.length() * 0.8;
-                const targetCameraPos = targetPosition.clone().normalize().multiplyScalar(targetDistance);
-                camera.position.lerpVectors(startPosition, targetCameraPos, easedProgress);
+                const direction = targetPosition.clone().normalize();
+                camera.position.copy(direction.multiplyScalar(newDistance));
 
                 // 시선은 항상 구의 중심(0,0,0)을 향하도록 설정
+                camera.lookAt(0, 0, 0);
                 controls.target.set(0, 0, 0);
                 controls.update();
 
                 if (progress < 1) {
                     requestAnimationFrame(animate);
+                } else {
+                    isAnimating = false;
                 }
             }
 
+            isAnimating = true;
             animate();
         }
 
