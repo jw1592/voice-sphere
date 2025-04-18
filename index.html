@@ -74,8 +74,8 @@
         controls.panSpeed = 0.8;
         controls.noZoom = false;
         controls.noPan = true;
-        controls.staticMoving = true;
-        controls.dynamicDampingFactor = 0.3;
+        controls.staticMoving = false;
+        controls.dynamicDampingFactor = 0.05;
         controls.minDistance = 3;
         controls.maxDistance = 10;
         controls.target = new THREE.Vector3(0, 0, 0);
@@ -171,22 +171,35 @@
 
         animate();
 
-        // 시작 버튼 숨기기 및 오디오 재생
-        const startButton = document.getElementById('start-button');
+        // 오디오 재생 함수
         const audioPlayer = document.getElementById('audio-player');
-        
-        startButton.addEventListener('click', () => {
-            startButton.style.display = 'none';
-            audioPlayer.play().catch(error => {
-                console.log("오디오 재생 실패:", error);
-            });
-        });
+        let hasInteracted = false;
+
+        function startAudio() {
+            if (!hasInteracted) {
+                hasInteracted = true;
+                audioPlayer.play().catch(error => {
+                    console.log("오디오 재생 실패:", error);
+                });
+            }
+        }
+
+        // 모바일 여부 확인
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+        if (isMobile) {
+            // 모바일: 첫 터치에 음악 재생
+            document.addEventListener('touchstart', startAudio, { once: true });
+        } else {
+            // 데스크톱: 마우스 진입 시 음악 재생
+            document.addEventListener('mouseover', startAudio, { once: true });
+        }
 
         // 페이지 visibility 변경 시 오디오 처리
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 audioPlayer.pause();
-            } else if (startButton.style.display === 'none') {
+            } else if (hasInteracted) {
                 audioPlayer.play().catch(error => {
                     console.log("오디오 재생 실패:", error);
                 });
