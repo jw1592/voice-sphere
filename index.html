@@ -413,14 +413,55 @@
         camera.lookAt(0, 0, 0);
         controls.update();
 
+        // 자동 회전 설정
+        const autoRotation = {
+            x: (Math.random() - 0.5) * 0.0003,
+            y: (Math.random() - 0.5) * 0.0003,
+            z: (Math.random() - 0.5) * 0.0003
+        };
+
+        let isAutoRotating = true;
+
         // 애니메이션
         function animate() {
             requestAnimationFrame(animate);
+            
+            // 자동 회전 (마우스로 조작 중이 아닐 때만)
+            if (isAutoRotating && !controls.isRotating) {
+                particlesMesh.rotation.x += autoRotation.x;
+                particlesMesh.rotation.y += autoRotation.y;
+                particlesMesh.rotation.z += autoRotation.z;
+            }
+
             controls.update();
             renderer.render(scene, camera);
         }
 
         animate();
+
+        // 마우스 이벤트에 따른 자동 회전 제어
+        renderer.domElement.addEventListener('mousedown', () => {
+            isAutoRotating = false;
+        });
+
+        renderer.domElement.addEventListener('mouseup', () => {
+            // 1초 후에 자동 회전 다시 시작
+            setTimeout(() => {
+                isAutoRotating = true;
+            }, 1000);
+        });
+
+        // 터치 이벤트에 대한 처리 추가
+        renderer.domElement.addEventListener('touchstart', () => {
+            isAutoRotating = false;
+        });
+
+        renderer.domElement.addEventListener('touchend', () => {
+            // 1초 후에 자동 회전 다시 시작
+            setTimeout(() => {
+                isAutoRotating = true;
+            }, 1000);
+        });
 
         // 오디오 재생 함수
         const audioPlayer = document.getElementById('audio-player');
