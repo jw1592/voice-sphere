@@ -754,21 +754,31 @@
             raycaster.setFromCamera(mouse, camera);
             const intersects = raycaster.intersectObject(particlesMesh);
 
+            // 크기 속성 초기화 (처음 한 번만)
+            if (!particlesMesh.geometry.attributes.size) {
+                const sizes = new Float32Array(particlesCount);
+                for(let i = 0; i < particlesCount; i++) {
+                    sizes[i] = 0.015;
+                }
+                particlesMesh.geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+            }
+
             if (intersects.length > 0) {
                 const index = intersects[0].index;
                 if (hoveredPoint !== null && hoveredPoint !== index) {
                     // 이전 호버 점 크기 복구
-                    particlesMesh.geometry.attributes.size.array[hoveredPoint] = 0.05;
+                    particlesMesh.geometry.attributes.size.array[hoveredPoint] = 0.015;
                 }
                 // 현재 호버 점 크기 증가
-                particlesMesh.geometry.attributes.size.array[index] = 0.08;
+                particlesMesh.geometry.attributes.size.array[index] = 0.025;
                 hoveredPoint = index;
+                particlesMesh.geometry.attributes.size.needsUpdate = true;
             } else if (hoveredPoint !== null) {
                 // 호버 벗어날 때 점 크기 복구
-                particlesMesh.geometry.attributes.size.array[hoveredPoint] = 0.05;
+                particlesMesh.geometry.attributes.size.array[hoveredPoint] = 0.015;
                 hoveredPoint = null;
+                particlesMesh.geometry.attributes.size.needsUpdate = true;
             }
-            particlesMesh.geometry.attributes.size.needsUpdate = true;
         }
 
         renderer.domElement.addEventListener('mousemove', onMouseMove);
