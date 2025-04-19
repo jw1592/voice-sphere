@@ -176,37 +176,25 @@
         const database = firebase.database();
         const auth = firebase.auth();
 
-        // 로그인 상태 관리
-        let currentUser = null;
-
-        // 구글 로그인 처리
+        // DOM 요소 참조
         const loginButton = document.getElementById('login-button');
         const userInfo = document.getElementById('user-info');
         const userEmail = document.getElementById('user-email');
         const logoutButton = document.getElementById('logout-button');
 
+        // 로그인 상태 관리
+        let currentUser = null;
+
+        // 구글 로그인 처리
         loginButton.addEventListener('click', () => {
             const provider = new firebase.auth.GoogleAuthProvider();
             auth.signInWithRedirect(provider)
                 .catch((error) => {
                     console.error('로그인 에러:', error);
-                    console.error('에러 코드:', error.code);
-                    console.error('에러 메시지:', error.message);
-                    alert('로그인 중 오류가 발생했습니다.');
                 });
         });
 
-        // 리디렉션 후 결과 처리
-        auth.getRedirectResult()
-            .then((result) => {
-                if (result.user) {
-                    console.log('로그인 성공:', result.user.email);
-                }
-            })
-            .catch((error) => {
-                console.error('리디렉션 에러:', error);
-            });
-
+        // 로그아웃 처리
         logoutButton.addEventListener('click', () => {
             auth.signOut()
                 .then(() => {
@@ -222,16 +210,27 @@
             console.log('인증 상태 변경:', user ? '로그인' : '로그아웃');
             if (user) {
                 currentUser = user;
-                document.getElementById('login-button').style.display = 'none';
-                document.getElementById('user-info').style.display = 'flex';
-                document.getElementById('user-email').textContent = user.email;
+                loginButton.style.display = 'none';
+                userInfo.style.display = 'flex';
+                userEmail.textContent = user.email;
             } else {
                 currentUser = null;
-                document.getElementById('login-button').style.display = 'flex';
-                document.getElementById('user-info').style.display = 'none';
-                document.getElementById('user-email').textContent = '';
+                loginButton.style.display = 'flex';
+                userInfo.style.display = 'none';
+                userEmail.textContent = '';
             }
         });
+
+        // 리디렉션 결과 처리
+        auth.getRedirectResult()
+            .then((result) => {
+                if (result.user) {
+                    console.log('로그인 성공:', result.user.email);
+                }
+            })
+            .catch((error) => {
+                console.error('리디렉션 에러:', error);
+            });
 
         // 점 할당 및 관리
         function assignPointToUser(pointIndex) {
