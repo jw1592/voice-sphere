@@ -180,7 +180,16 @@
 
         loginButton.addEventListener('click', () => {
             const provider = new firebase.auth.GoogleAuthProvider();
-            auth.signInWithPopup(provider);
+            auth.signInWithPopup(provider)
+                .then((result) => {
+                    console.log('로그인 성공:', result.user.email);
+                })
+                .catch((error) => {
+                    console.error('로그인 에러:', error);
+                    console.error('에러 코드:', error.code);
+                    console.error('에러 메시지:', error.message);
+                    alert('로그인 중 오류가 발생했습니다.');
+                });
         });
 
         logoutButton.addEventListener('click', () => {
