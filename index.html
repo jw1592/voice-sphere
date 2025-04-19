@@ -201,18 +201,26 @@
             });
 
         logoutButton.addEventListener('click', () => {
-            auth.signOut();
+            auth.signOut()
+                .then(() => {
+                    console.log('로그아웃 성공');
+                })
+                .catch((error) => {
+                    console.error('로그아웃 에러:', error);
+                });
         });
 
         // 인증 상태 변경 감지
         auth.onAuthStateChanged((user) => {
             if (user) {
                 currentUser = user;
+                console.log('로그인된 사용자:', user.email);
                 loginButton.style.display = 'none';
                 userInfo.style.display = 'flex';
                 userEmail.textContent = user.email;
             } else {
                 currentUser = null;
+                console.log('로그아웃 상태');
                 loginButton.style.display = 'flex';
                 userInfo.style.display = 'none';
                 userEmail.textContent = '';
