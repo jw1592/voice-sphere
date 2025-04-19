@@ -31,6 +31,9 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
         }
 
         #login-button {
@@ -53,9 +56,13 @@
         #user-info {
             display: none;
             color: white;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 10px;
-            border-radius: 5px;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #user-email {
+            font-size: 14px;
+            color: white;
         }
 
         #logout-button {
@@ -212,18 +219,17 @@
 
         // 인증 상태 변경 감지
         auth.onAuthStateChanged((user) => {
+            console.log('인증 상태 변경:', user ? '로그인' : '로그아웃');
             if (user) {
                 currentUser = user;
-                console.log('로그인된 사용자:', user.email);
-                loginButton.style.display = 'none';
-                userInfo.style.display = 'flex';
-                userEmail.textContent = user.email;
+                document.getElementById('login-button').style.display = 'none';
+                document.getElementById('user-info').style.display = 'flex';
+                document.getElementById('user-email').textContent = user.email;
             } else {
                 currentUser = null;
-                console.log('로그아웃 상태');
-                loginButton.style.display = 'flex';
-                userInfo.style.display = 'none';
-                userEmail.textContent = '';
+                document.getElementById('login-button').style.display = 'flex';
+                document.getElementById('user-info').style.display = 'none';
+                document.getElementById('user-email').textContent = '';
             }
         });
 
