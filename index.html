@@ -79,7 +79,7 @@
             background: #c82333;
         }
 
-        /* 바텀시트 스타일 */
+        /* 바텀시트 스타일 수정 */
         .bottom-sheet {
             position: fixed;
             bottom: -200px;
@@ -103,13 +103,13 @@
             text-align: center;
         }
 
-        .nickname {
+        .point-status {
             font-size: 18px;
             margin-bottom: 15px;
         }
 
-        .message-button {
-            background: #4CAF50;
+        .claim-button {
+            background: #4285f4;
             color: white;
             border: none;
             padding: 10px 20px;
@@ -117,10 +117,20 @@
             cursor: pointer;
             font-size: 16px;
             width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
         }
 
-        .message-button:hover {
-            background: #45a049;
+        .claim-button:hover {
+            background: #357abd;
+        }
+
+        .owner-info {
+            font-size: 16px;
+            margin: 15px 0;
+            color: #4CAF50;
         }
     </style>
     <!-- Firebase SDK 추가 -->
@@ -155,8 +165,14 @@
 
     <div class="bottom-sheet">
         <div class="bottom-sheet-content">
-            <div class="nickname">닉네임: <span id="user-nickname">-</span></div>
-            <button class="message-button">메시지 보내기</button>
+            <div class="point-status">별 상태: <span id="point-status">-</span></div>
+            <div id="owner-info" class="owner-info" style="display: none">
+                주인: <span id="point-owner">-</span>
+            </div>
+            <button id="claim-button" class="claim-button" style="display: none">
+                <img src="https://www.google.com/favicon.ico" width="20" height="20" alt="Google">
+                이 별이 되기
+            </button>
         </div>
     </div>
 
@@ -473,8 +489,10 @@
             requestAnimationFrame(animate);
         }
 
-        // 마우스 클릭 이벤트 처리
+        // 점 클릭 이벤트 처리 수정
         function onMouseClick(event) {
+            if (event.target.closest('.bottom-sheet')) return;
+
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -483,150 +501,58 @@
 
             if (intersects.length > 0) {
                 const index = intersects[0].index;
+                const pointRef = database.ref(`points/list/${index}`);
 
-                // 로그인한 사용자만 점 선택 가능
-                if (!currentUser) {
-                    alert('점을 선택하려면 먼저 로그인해주세요.');
-                    return;
-                }
+                pointRef.once('value')
+                    .then((snapshot) => {
+                        const pointData = snapshot.val();
+                        const bottomSheet = document.querySelector('.bottom-sheet');
+                        const pointStatus = document.getElementById('point-status');
+                        const ownerInfo = document.getElementById('owner-info');
+                        const pointOwner = document.getElementById('point-owner');
+                        const claimButton = document.getElementById('claim-button');
 
-                // 점 할당 시도
-                assignPointToUser(index);
-
-                const positions = particlesMesh.geometry.attributes.position.array;
-                const selectedPosition = new THREE.Vector3(
-                    positions[index * 3],
-                    positions[index * 3 + 1],
-                    positions[index * 3 + 2]
-                );
-
-                // 이전에 선택된 점이 있다면
-                if (selectedPointIndex !== null) {
-                    const prevSelectedIndex = selectedPointIndex;
-                    const prevOriginalPositions = {...originalPositions};
-
-                    // 이전 점의 복원 애니메이션 시작
-                    restorePointPositions();
-
-                    // 복원 애니메이션이 완료된 후 새로운 점 선택 애니메이션 시작
-                    nextAnimationCallback = () => {
-                        selectedPointIndex = index;
-                        originalPositions = {};
-
-                        // 주변 점들 밀어내기 준비
-                        const pushRadius = 0.5;
-                        const pushStrength = 0.3;
-                        
-                        currentPositions = {};
-                        targetPositions = {};
-
-                        for (let i = 0; i < particlesCount; i++) {
-                            if (i === index) continue;
-
-                            const x = positions[i * 3];
-                            const y = positions[i * 3 + 1];
-                            const z = positions[i * 3 + 2];
-                            const point = new THREE.Vector3(x, y, z);
-                            const distance = selectedPosition.distanceTo(point);
-
-                            if (distance < pushRadius) {
-                                currentPositions[i] = { x, y, z };
-                                originalPositions[i] = { x, y, z };
-
-                                const direction = point.clone().sub(selectedPosition).normalize();
-                                const pushAmount = (1 - distance / pushRadius) * pushStrength;
-
-                                targetPositions[i] = {
-                                    x: x + direction.x * pushAmount,
-                                    y: y + direction.y * pushAmount,
-                                    z: z + direction.z * pushAmount
+                        if (pointData && pointData.isOccupied) {
+                            pointStatus.textContent = '할당됨';
+                            ownerInfo.style.display = 'block';
+                            pointOwner.textContent = pointData.userEmail;
+                            claimButton.style.display = 'none';
+                        } else {
+                            pointStatus.textContent = '비어있음';
+                            ownerInfo.style.display = 'none';
+                            if (currentUser) {
+                                claimButton.style.display = 'none';
+                                // 자동으로 점 할당
+                                assignPointToUser(index);
+                            } else {
+                                claimButton.style.display = 'flex';
+                                // 클레임 버튼 클릭 이벤트
+                                const handleClaim = () => {
+                                    const provider = new firebase.auth.GoogleAuthProvider();
+                                    auth.signInWithRedirect(provider)
+                                        .catch((error) => {
+                                            console.error('로그인 에러:', error);
+                                        });
                                 };
+                                claimButton.onclick = handleClaim;
                             }
                         }
 
-                        // 선택된 점 스타일 변경
-                        const colors = particlesMesh.geometry.attributes.color.array;
-                        colors[index * 3] = 1;     // R
-                        colors[index * 3 + 1] = 0.5; // G
-                        colors[index * 3 + 2] = 0;   // B
-                        particlesMesh.geometry.attributes.color.needsUpdate = true;
+                        bottomSheet.classList.add('active');
+
+                        const positions = particlesMesh.geometry.attributes.position.array;
+                        const selectedPosition = new THREE.Vector3(
+                            positions[index * 3],
+                            positions[index * 3 + 1],
+                            positions[index * 3 + 2]
+                        );
 
                         // 카메라 이동
                         animateCameraToPoint(selectedPosition);
-
-                        // 점 애니메이션 시작
-                        animationStartTime = Date.now();
-                        isAnimating = true;
-                        animatePoints();
-                    };
-                } else {
-                    // 첫 번째 점 선택
-                    selectedPointIndex = index;
-
-                    // 주변 점들 밀어내기 준비
-                    const pushRadius = 0.5;
-                    const pushStrength = 0.3;
-                    
-                    currentPositions = {};
-                    targetPositions = {};
-
-                    for (let i = 0; i < particlesCount; i++) {
-                        if (i === index) continue;
-
-                        const x = positions[i * 3];
-                        const y = positions[i * 3 + 1];
-                        const z = positions[i * 3 + 2];
-                        const point = new THREE.Vector3(x, y, z);
-                        const distance = selectedPosition.distanceTo(point);
-
-                        if (distance < pushRadius) {
-                            currentPositions[i] = { x, y, z };
-                            originalPositions[i] = { x, y, z };
-
-                            const direction = point.clone().sub(selectedPosition).normalize();
-                            const pushAmount = (1 - distance / pushRadius) * pushStrength;
-
-                            targetPositions[i] = {
-                                x: x + direction.x * pushAmount,
-                                y: y + direction.y * pushAmount,
-                                z: z + direction.z * pushAmount
-                            };
-                        }
-                    }
-
-                    // 선택된 점 스타일 변경
-                    const colors = particlesMesh.geometry.attributes.color.array;
-                    colors[index * 3] = 1;     // R
-                    colors[index * 3 + 1] = 0.5; // G
-                    colors[index * 3 + 2] = 0;   // B
-                    particlesMesh.geometry.attributes.color.needsUpdate = true;
-
-                    // 카메라 이동
-                    animateCameraToPoint(selectedPosition);
-
-                    // 점 애니메이션 시작
-                    animationStartTime = Date.now();
-                    isAnimating = true;
-                    animatePoints();
-                }
-
-                // 자동 회전 일시 중지
-                isAutoRotating = false;
-
-                // 바텀시트 표시
-                const userNickname = document.getElementById('user-nickname');
-                userNickname.textContent = '사용자_' + Math.floor(Math.random() * 1000);
-                bottomSheet.classList.add('active');
-
-                // 3초 후에 자동 회전 다시 시작
-                setTimeout(() => {
-                    if (!controls.isRotating) {
-                        isAutoRotating = true;
-                    }
-                }, 3000);
+                    });
             } else if (!event.target.closest('.bottom-sheet')) {
                 // 빈 공간 클릭 시 바텀시트 닫기
-                bottomSheet.classList.remove('active');
+                document.querySelector('.bottom-sheet').classList.remove('active');
                 restorePointPositions();
             }
         }
